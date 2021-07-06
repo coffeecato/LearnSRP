@@ -7,6 +7,8 @@
 
 04 Multiple Lights
 
+05 Bumpiness
+
 进行中：
 
-05 Bumpiness
+06 Shadows
