@@ -7,11 +7,14 @@
         // [NoScaleOffset] _HeightMap ("Heights", 2D) = "gray" {}
         [NoScaleOffset] _NormalMap ("Normals", 2D) = "bump"{}
         _BumpScale ("Bump Scale", Float) = 1
+        [NoScaleOffset] _MetallicMap ("Metallic", 2D) = "white" {}
         [Gamma]_Metallic ("Metallic", Range(0, 1)) = 0
         _Smoothness ("Smoothness", Range(0, 1)) = 0.5
-        _DetailTex ("Detail Texture", 2D) = "gray" {}
+        _DetailTex ("Detail Albedo", 2D) = "gray" {}
         [NoScaleOffset] _DetailNormalMap ("Detail Normals", 2D) = "bump" {}
         _DetailBumpScale ("Detail Bump Scale", Float) = 1
+        [NoScaleOffset] _EmissionMap ("Emission", 2D) = "black"{}
+        _Emission ("Emission", Color) = (0, 0, 0)
     }
     SubShader
     {
@@ -20,9 +23,13 @@
             Tags { "LightMode" = "ForwardBase" }
             CGPROGRAM
             #pragma target 3.0
+            #pragma shader_feature _ _METALLIC_MAP
+            #pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+            #pragma shader_feature _EMISSION_MAP
             #pragma vertex MyVertexProgram
             #pragma fragment MyFragmentProgram
             #define BINORMAL_PER_FRAGMENT
+            #define FORWARD_BASE_PASS
 
             // #include "UnityCG.cginc"
             // #include "UnityStandardBRDF.cginc"
@@ -30,7 +37,7 @@
             #include "UnityPBSLighting.cginc"
 
             float4 _Tint;
-            sampler2D _MainTex, _DetailTex;
+            sampler2D _MainTex, _DetailTex, _MetallicMap, _EmissionMap;
             float4 _MainTex_ST, _DetailTex_ST;
             // sampler2D _HeightMap;
             // float4 _HeightMap_TexelSize;
@@ -38,6 +45,7 @@
             float _BumpScale, _DetailBumpScale;
             float _Metallic;
             float _Smoothness;
+            float3 _Emission;
 
             struct VertexData
             {
@@ -67,6 +75,35 @@
                     float3 vertexLightColor : TEXCOORD5;
                 #endif 
             };
+            
+            float GetMetallic(Interpolators i)
+            {
+                return tex2D(_MetallicMap, i.uv.xy).r * _Metallic;
+            }
+
+            float GetSmoothness(Interpolators i)
+            {
+                float smoothness = 1;
+                #if defined(_SMOOTHNESS_ALBEDO)
+                    smoothness = tex2D(_MainTex, i.uv.xy).a;
+                #elif defined(_SMOOTHNESS_METALLIC) && defined(_METALLIC_MAP)
+                    return tex2D(_MetallicMap, i.uv.xy).a;
+                #endif
+                return smoothness * _Smoothness;
+            }
+
+            float3 GetEmission(Interpolators i)
+            {
+                #if defined(FORWARD_BASE_PASS)
+                    #if defined(_EMISSION_MAP)
+                        return tex2D(_EmissionMap, i.uv.xy) * _Emission;
+                    #else
+                        return _Emission;
+                    #endif
+                    return 0;
+                #endif
+                return 0;
+            }
 
             float3 CreateBinormal(float3 normal, float3 tangent, float binormalSign)
             {
@@ -156,7 +193,7 @@
                 // 纯介电材质也有高光反射，使用内置函数
                 float3 specularTint;
                 float oneMinusReflectivity;
-                albedo = DiffuseAndSpecularFromMetallic(albedo, _Metallic, specularTint, oneMinusReflectivity);
+                albedo = DiffuseAndSpecularFromMetallic(albedo, GetMetallic(i), specularTint, oneMinusReflectivity);
 
                 UnityLight light;
                 light.color = lightColor;
@@ -165,7 +202,9 @@
                 UnityIndirect indirectLight;
                 indirectLight.diffuse = 0;
                 indirectLight.specular = 0;
-                return UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, _Smoothness, i.normal, viewDir, light, indirectLight);
+                float4 color = UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, GetSmoothness(i), i.normal, viewDir, light, indirectLight);
+                color.rgb += GetEmission(i);
+                return color;
             }
 
                         // float4 MyFragmentProgram(Interpolators i) : SV_TARGET
@@ -214,4 +253,6 @@
             ENDCG
         }
     }
+
+    CustomEditor "MyLightingShaderGUI"
 }
