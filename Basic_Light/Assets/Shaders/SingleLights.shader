@@ -35,6 +35,8 @@
             // #include "UnityStandardBRDF.cginc"
             // #include "UnityStandardUtils.cginc"
             #include "UnityPBSLighting.cginc"
+            //明天需要把光照加进来。
+            // #include "MyLighting.cginc"
 
             float4 _Tint;
             sampler2D _MainTex, _DetailTex, _MetallicMap, _EmissionMap;

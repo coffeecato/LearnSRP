@@ -53,5 +53,5 @@ Material:
     - _Metallic: 1
     - _Smoothness: 1
     m_Colors:
-    - _Emission: {r: 2.37969, g: 2.37969, b: 2.37969, a: 1}
+    - _Emission: {r: 1, g: 1, b: 1, a: 1}
     - _Tint: {r: 1, g: 1, b: 1, a: 1}
