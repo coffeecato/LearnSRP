@@ -16,6 +16,7 @@
         _Emission ("Emission", Color) = (0, 0, 0)
         [NoScaleOffset] _OcclusionMap ("Occlusion", 2D) = "white" {}
         _OcclusionStrength ("Occlusion Strength", Range(0, 1)) = 1
+        [NoScaleOffset] _DetailMask ("Detail Mask", 2D) = "white" {}
     }
     SubShader
     {
@@ -26,8 +27,12 @@
             #pragma target 3.0
             #pragma shader_feature _ _METALLIC_MAP
             #pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+            #pragma shader_feature _NORMAL_MAP
             #pragma shader_feature _OCCLUSION_MAP
             #pragma shader_feature _EMISSION_MAP
+            #pragma shader_feature _DETAIL_MASK
+            #pragma shader_feature _DETAIL_ALBEDO_MAP
+            #pragma shader_feature _DETAIL_NORMAL_MAP
             #pragma vertex MyVertexProgram
             #pragma fragment MyFragmentProgram
             #define BINORMAL_PER_FRAGMENT
@@ -39,7 +44,7 @@
             float4 _Tint;
             sampler2D _MainTex, _DetailTex, _MetallicMap, _EmissionMap, _OcclusionMap;
             float4 _MainTex_ST, _DetailTex_ST;
-            sampler2D _NormalMap, _DetailNormalMap;
+            sampler2D _NormalMap, _DetailNormalMap, _DetailMask;
             float _BumpScale, _DetailBumpScale, _OcclusionStrength;
             float _Metallic;
             float _Smoothness;
@@ -110,6 +115,40 @@
                 #else
                     return 1;
                 #endif
+            }
+
+            float GetDetailMask(Interpolators i)
+            {
+                #if defined(_DETAIL_MASK)
+                    return tex2D(_DetailMask, i.uv.xy).a;
+                #else
+                    return 1;
+                #endif
+            }
+
+            // 计算细节遮罩贴图对albedo的影响
+            float3 GetAlbedo (Interpolators i)
+            {
+                float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
+                #if defined(_DETAIL_ALBEDO_MAP)
+                    float3 details = tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;
+                    albedo = lerp(albedo, albedo * details, GetDetailMask(i));
+                #endif
+                return albedo;
+            }
+
+            float3 GetTangentSpaceNormal(Interpolators i)
+            {
+                float3 normal = float3(0, 0, 1);
+                #if defined(_NORMAL_MAP)
+                    normal = UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);    
+                #endif
+                #if defined(_DETAIL_NORMAL_MAP)
+                    float3 detailNormal = UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+                    detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));
+                    normal = BlendNormals(normal, detailNormal);
+                #endif
+                return normal;
             }
 
             float3 CreateBinormal(float3 normal, float3 tangent, float binormalSign)
@@ -226,9 +265,7 @@
             // 使用法线贴图代替高度贴图
             void InitializeFragmentNormal(inout Interpolators i)
             {
-                float3 mainNormal = UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);
-                float3 detailNormal = UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
-                float3 tangentSpaceNormal = BlendNormals(mainNormal, detailNormal);
+                float3 tangentSpaceNormal = GetTangentSpaceNormal(i);
                 #if defined(BINORMAL_PER_FRAGMENT)
                     float3 binormal = CreateBinormal(i.normal, i.tangent.xyz, i.tangent.w);
                 #else
@@ -242,27 +279,40 @@
                 InitializeFragmentNormal(i);
                 float3 lightDir = _WorldSpaceLightPos0.xyz;
                 float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
-                // return DotClamped(lightDir, i.normal);
                 float3 lightColor = _LightColor0.rgb;
-                float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
-                albedo *= tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;
-                // albedo *= tex2D(_HeightMap, i.uv);
-                // 纯介电材质也有高光反射，使用内置函数
+                // float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
+                // albedo *= tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;
                 float3 specularTint;
                 float oneMinusReflectivity;
-                albedo = DiffuseAndSpecularFromMetallic(albedo, GetMetallic(i), specularTint, oneMinusReflectivity);
-
-                // UnityLight light;
-                // light.color = lightColor;
-                // light.dir = lightDir;
-                // light.ndotl = DotClamped(i.normal, lightDir);
-                // UnityIndirect indirectLight;
-                // indirectLight.diffuse = 0;
-                // indirectLight.specular = 0;
+                float3 albedo = DiffuseAndSpecularFromMetallic(GetAlbedo(i), GetMetallic(i), specularTint, oneMinusReflectivity);
                 float4 color = UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, GetSmoothness(i), i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
                 color.rgb += GetEmission(i);
                 return color;
             }
+            ENDCG
+        }
+
+        // 不确定Add PASS是否可以正常工作
+        Pass
+        {
+            Tags { "LightMode" = "ForwardAdd" }
+            Blend One One
+            ZWrite Off
+            
+            CGPROGRAM
+            #pragma target 3.0
+            #pragma multi_compile_fwdadd
+            #pragma shader_feature _METALLIC_MAP
+			#pragma shader_feature _ _SMOOTHNESS_ALBEDO _SMOOTHNESS_METALLIC
+			#pragma shader_feature _NORMAL_MAP
+			#pragma shader_feature _DETAIL_MASK
+			#pragma shader_feature _DETAIL_ALBEDO_MAP
+			#pragma shader_feature _DETAIL_NORMAL_MAP
+
+            #pragma vertex MyVertexProgram
+            #pragma fragment MyFragmentProgram
+            
+            #include "MyLighting.cginc"
             ENDCG
         }
     }
