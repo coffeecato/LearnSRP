@@ -4,33 +4,124 @@
 #include "AutoLight.cginc"
 
 float4 _Tint;
-sampler2D _MainTex;
-float4 _MainTex_ST;
-float _Metallic;
-float _Smoothness;
+sampler2D _MainTex, _DetailTex, _MetallicMap, _EmissionMap, _OcclusionMap;
+float4 _MainTex_ST, _DetailTex_ST;
+sampler2D _NormalMap, _DetailNormalMap, _DetailMask;
+float _BumpScale, _DetailBumpScale, _OcclusionStrength;
+float _Metallic, _Smoothness, _AlphaCutoff;
+float3 _Emission;
 
 struct VertexData
 {
-    float4 vertex : POSITION;
+    float4 position : POSITION;
     float3 normal : NORMAL;
+    float4 tangent : TANGENT;
     float2 uv : TEXCOORD0;
 };
 
 struct Interpolators
 {
-    float4 pos : SV_POSITION;
-    float2 uv : TEXCOORD0;
+    float4 position : SV_POSITION;
+    float4 uv : TEXCOORD0;
     float3 normal : TEXCOORD1;
-    float3 worldPos : TEXCOORD2;
     
-    // #if defined(SHADOWS_SCREEN)
-    //     float4 shadowCoordinates : TEXCOORD3;
-    // #endif
-    SHADOW_COORDS(3)
-    #if defined(VERTEXLIGHT_ON)
-        float3 vertexLightColor : TEXCOORD4;
+    #if defined(BINORMAL_PER_FRAGMENT)
+        float4 tangent : TEXCOORD2;
+    #else
+        float3 tangent : TEXCOORD2;
+        float3 binormal : TEXCOORD3;
     #endif
+
+    float3 worldPos : TEXCOORD4;
+    SHADOW_COORDS(5)
+
+    #if defined(VERTEXLIGHT_ON)
+        float3 vertexLightColor : TEXCOORD6;
+    #endif 
 };
+
+
+float GetDetailMask(Interpolators i)
+{
+    #if defined(_DETAIL_MASK)
+        return tex2D(_DetailMask, i.uv.xy).a;
+    #else
+        return 1;
+    #endif
+}
+
+// 计算细节遮罩贴图对albedo的影响
+float3 GetAlbedo (Interpolators i)
+{
+    float3 albedo = tex2D(_MainTex, i.uv.xy).rgb * _Tint.rgb;
+    #if defined(_DETAIL_ALBEDO_MAP)
+        float3 details = tex2D(_DetailTex, i.uv.zw) * unity_ColorSpaceDouble;
+        albedo = lerp(albedo, albedo * details, GetDetailMask(i));
+    #endif
+    return albedo;
+}
+
+float GetAlpha (Interpolators i) 
+{
+    // return _Tint.a * tex2D(_MainTex, i.uv.xy).a;
+	float alpha = _Tint.a;
+	#if !defined(_SMOOTHNESS_ALBEDO)
+		alpha *= tex2D(_MainTex, i.uv.xy).a;
+	#endif
+	return alpha;
+}
+
+float3 GetTangentSpaceNormal(Interpolators i)
+{
+    float3 normal = float3(0, 0, 1);
+    #if defined(_NORMAL_MAP)
+        normal = UnpackScaleNormal(tex2D(_NormalMap, i.uv.xy), _BumpScale);    
+    #endif
+    #if defined(_DETAIL_NORMAL_MAP)
+        float3 detailNormal = UnpackScaleNormal(tex2D(_DetailNormalMap, i.uv.zw), _DetailBumpScale);
+        detailNormal = lerp(float3(0, 0, 1), detailNormal, GetDetailMask(i));
+        normal = BlendNormals(normal, detailNormal);
+    #endif
+    return normal;
+}
+
+float GetMetallic(Interpolators i)
+{
+    return tex2D(_MetallicMap, i.uv.xy).r * _Metallic;
+}
+
+float GetSmoothness(Interpolators i)
+{
+    float smoothness = 1;
+    #if defined(_SMOOTHNESS_ALBEDO)
+        smoothness = tex2D(_MainTex, i.uv.xy).a;
+    #elif defined(_SMOOTHNESS_METALLIC) && defined(_METALLIC_MAP)
+        return tex2D(_MetallicMap, i.uv.xy).a;
+    #endif
+    return smoothness * _Smoothness;
+}
+
+float3 GetEmission(Interpolators i)
+{
+    #if defined(FORWARD_BASE_PASS)
+        #if defined(_EMISSION_MAP)
+            return tex2D(_EmissionMap, i.uv.xy) * _Emission;
+        #else
+            return _Emission;
+        #endif
+        return 0;
+    #endif
+    return 0;
+}
+
+float GetOcclusion(Interpolators i)
+{
+    #if defined(_OCCLUSION_MAP)
+        return lerp(1, tex2D(_OcclusionMap, i.uv.xy).g, _OcclusionStrength);
+    #else
+        return 1;
+    #endif
+}
 
 void ComputeVertexLightColor (inout Interpolators i)
 {
@@ -51,26 +142,26 @@ void ComputeVertexLightColor (inout Interpolators i)
     #endif
 }
 
+float3 CreateBinormal(float3 normal, float3 tangent, float binormalSign)
+{
+    return cross(normal, tangent.xyz) * (binormalSign * unity_WorldTransformParams.w);
+}
+
 Interpolators MyVertexProgram(VertexData v)
 {
     Interpolators i;
-    i.uv = TRANSFORM_TEX(v.uv, _MainTex);
-    i.pos = UnityObjectToClipPos(v.vertex);
-    // i.normal = mul((float3x3)unity_ObjectToWorld, v.normal);
-    //转置世界到对象矩阵
-    // i.normal = mul(transpose((float3x3)unity_ObjectToWorld), v.normal);
+    i.position = UnityObjectToClipPos(v.position);
     i.normal = UnityObjectToWorldNormal(v.normal);
-    i.worldPos = mul(unity_ObjectToWorld, v.vertex);
-    
-    i.normal = normalize(i.normal);
+    i.worldPos = mul(unity_ObjectToWorld, v.position);
+    #if defined(BINORMAL_PER_FRAGMENT)
+        i.tangent = float4(UnityObjectToWorldDir(v.tangent.xyz), v.tangent.w);
+    #else
+        i.tangent = UnityObjectToWorldDir(v.tangent.xyz);
+        i.binormal = CreateBinormal(i.normal, i.tangent, v.tangent.w);
+    #endif
 
-    // #if defined(SHADOWS_SCREEN)
-    //     // i.shadowCoordinates.xy = (float2(i.position.x, -i.position.y) + i.position.w) * 0.5;
-    //     // i.shadowCoordinates.zw = i.position.zw;
-    //     // 使用unity的内置接口
-    //     i.shadowCoordinates = ComputeScreenPos(i.position);
-    // #endif
-    //使用内置宏替换上面操作
+    i.uv.xy = TRANSFORM_TEX(v.uv, _MainTex);
+    i.uv.zw = TRANSFORM_TEX(v.uv, _DetailTex);
     TRANSFER_SHADOW(i);
     ComputeVertexLightColor(i);
     return i;
@@ -176,8 +267,23 @@ UnityIndirect CreateIndirectLight(Interpolators i, float3 viewDir)
         #else
             indirectLight.specular = probe0;
         #endif
+        float occlusion = GetOcclusion(i);
+        indirectLight.diffuse *= occlusion;
+        indirectLight.specular *= occlusion;
     #endif
     return indirectLight;
+}
+
+// 使用法线贴图代替高度贴图
+void InitializeFragmentNormal(inout Interpolators i)
+{
+    float3 tangentSpaceNormal = GetTangentSpaceNormal(i);
+    #if defined(BINORMAL_PER_FRAGMENT)
+        float3 binormal = CreateBinormal(i.normal, i.tangent.xyz, i.tangent.w);
+    #else
+        float3 binormal = i.binormal;
+    #endif
+    i.normal = normalize(tangentSpaceNormal.x * i.tangent + tangentSpaceNormal.y * binormal + tangentSpaceNormal.z * i.normal);
 }
 //试验球谐函数的9项输出
 // float4 MyFragmentProgram(Interpolators i) : SV_TARGET
@@ -187,20 +293,40 @@ UnityIndirect CreateIndirectLight(Interpolators i, float3 viewDir)
 //     return t > 0 ? t : float4(1, 0, 0, 1) * -t;
 // }
 // 使用Untiy PBS函数计算
+// float4 MyFragmentProgram(Interpolators i) : SV_TARGET
+// {
+//     float alpha = GetAlpha(i);
+//     clip(alpha - _AlphaCutoff);
+//     i.normal = normalize(i.normal);
+//     float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+//     float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
+//     // 纯介电材质也有高光反射，使用内置函数
+//     float3 specularTint;
+//     float oneMinusReflectivity;
+//     albedo = DiffuseAndSpecularFromMetallic(albedo, _Metallic, specularTint, oneMinusReflectivity);
+    
+//     // float3 shColor = ShadeSH9(float4(i.normal, 1));
+//     // return float4(shColor, 1);
+
+//     return UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, _Smoothness, i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
+// }
+// 整合透明度之前的改动
 float4 MyFragmentProgram(Interpolators i) : SV_TARGET
 {
-    i.normal = normalize(i.normal);
+    float alpha = GetAlpha(i);
+    #if defined(_SMOOTHNESS_ALBEDO)
+        clip(alpha - _AlphaCutoff);
+    #endif
+
+    InitializeFragmentNormal(i);
     float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
-    float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
-    // 纯介电材质也有高光反射，使用内置函数
+    float3 lightColor = _LightColor0.rgb;
     float3 specularTint;
     float oneMinusReflectivity;
-    albedo = DiffuseAndSpecularFromMetallic(albedo, _Metallic, specularTint, oneMinusReflectivity);
-    
-    // float3 shColor = ShadeSH9(float4(i.normal, 1));
-    // return float4(shColor, 1);
-
-    return UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, _Smoothness, i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
+    float3 albedo = DiffuseAndSpecularFromMetallic(GetAlbedo(i), GetMetallic(i), specularTint, oneMinusReflectivity);
+    float4 color = UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, GetSmoothness(i), i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
+    color.rgb += GetEmission(i);
+    return color;
 }
 
 #endif

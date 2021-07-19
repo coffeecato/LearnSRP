@@ -60,6 +60,7 @@ public class MyLightingShaderGUI : ShaderGUI
         GUILayout.Label("Main Maps", EditorStyles.boldLabel);
         MaterialProperty mainTex = FindProperty("_MainTex");
         editor.TexturePropertySingleLine(MakeLabel(mainTex, "Albedo (RGB"), mainTex, FindProperty("_Tint"));
+        DoAlphaCutoff();
         DoMetallic();
         DoSmoothness();
         DoNormals();
@@ -148,6 +149,14 @@ public class MyLightingShaderGUI : ShaderGUI
             SetKeyword("_SMOOTHNESS_METALLIC", source == SmoothnessSource.Metallic);
         }
         EditorGUI.indentLevel -= 3;
+    }
+
+    void DoAlphaCutoff()
+    {
+        MaterialProperty slider = FindProperty("_AlphaCutoff");
+        EditorGUI.indentLevel += 2;
+        editor.ShaderProperty(slider, MakeLabel(slider));
+        EditorGUI.indentLevel -= 2;
     }
 
     void DoSecondary()
