@@ -63,7 +63,6 @@ float3 GetAlbedo (Interpolators i)
 
 float GetAlpha (Interpolators i) 
 {
-    // return _Tint.a * tex2D(_MainTex, i.uv.xy).a;
 	float alpha = _Tint.a;
 	#if !defined(_SMOOTHNESS_ALBEDO)
 		alpha *= tex2D(_MainTex, i.uv.xy).a;
@@ -285,36 +284,11 @@ void InitializeFragmentNormal(inout Interpolators i)
     #endif
     i.normal = normalize(tangentSpaceNormal.x * i.tangent + tangentSpaceNormal.y * binormal + tangentSpaceNormal.z * i.normal);
 }
-//试验球谐函数的9项输出
-// float4 MyFragmentProgram(Interpolators i) : SV_TARGET
-// {
-//     i.normal = normalize(i.normal);
-//     float t = i.normal.z * i.normal.z;
-//     return t > 0 ? t : float4(1, 0, 0, 1) * -t;
-// }
-// 使用Untiy PBS函数计算
-// float4 MyFragmentProgram(Interpolators i) : SV_TARGET
-// {
-//     float alpha = GetAlpha(i);
-//     clip(alpha - _AlphaCutoff);
-//     i.normal = normalize(i.normal);
-//     float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
-//     float3 albedo = tex2D(_MainTex, i.uv).rgb * _Tint.rgb;
-//     // 纯介电材质也有高光反射，使用内置函数
-//     float3 specularTint;
-//     float oneMinusReflectivity;
-//     albedo = DiffuseAndSpecularFromMetallic(albedo, _Metallic, specularTint, oneMinusReflectivity);
-    
-//     // float3 shColor = ShadeSH9(float4(i.normal, 1));
-//     // return float4(shColor, 1);
-
-//     return UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, _Smoothness, i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
-// }
 // 整合透明度之前的改动
 float4 MyFragmentProgram(Interpolators i) : SV_TARGET
 {
     float alpha = GetAlpha(i);
-    #if defined(_SMOOTHNESS_ALBEDO)
+    #if defined(_RENDERING_CUTOUT)
         clip(alpha - _AlphaCutoff);
     #endif
 
@@ -326,6 +300,9 @@ float4 MyFragmentProgram(Interpolators i) : SV_TARGET
     float3 albedo = DiffuseAndSpecularFromMetallic(GetAlbedo(i), GetMetallic(i), specularTint, oneMinusReflectivity);
     float4 color = UNITY_BRDF_PBS(albedo, specularTint, oneMinusReflectivity, GetSmoothness(i), i.normal, viewDir, CreateLight(i), CreateIndirectLight(i, viewDir));
     color.rgb += GetEmission(i);
+    #if defined(_RENDERING_FADE)
+        color.a = alpha;
+    #endif
     return color;
 }
 
