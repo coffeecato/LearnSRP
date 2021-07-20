@@ -1,8 +1,9 @@
 # Learn Rendering   
 学习路径：Basic Render --> Scriptable Render Pipeline --> Universal Render Pipeline    
 1.学习catlikecoding的基础Render课程（9/20）
-https://catlikecoding.com/unity/tutorials/rendering/
+https://catlikecoding.com/unity/tutorials/rendering/    
 2.学习catlikecoding的Custom SRP课程（17）
+https://catlikecoding.com/unity/tutorials/custom-srp/   
 
 已完成：  
 04 The First Light  
