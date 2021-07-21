@@ -7,9 +7,9 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Transparency
-  m_Shader: {fileID: 4800000, guid: ed079d64f93e0904c971471e02658745, type: 3}
-  m_ShaderKeywords: _RENDERING_TRANSPARENT
+  m_Name: MyLightingShader Transparency
+  m_Shader: {fileID: 4800000, guid: 6d202aceccb3ba44e8fcd8e143b24ddb, type: 3}
+  m_ShaderKeywords: _RENDERING_TRANSPARENT _SMOOTHNESS_METALLIC
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
@@ -53,15 +53,15 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Floats:
-    - _AlphaCutoff: 0.278
+    - _AlphaCutoff: 0.5
     - _BumpScale: 1
     - _DetailBumpScale: 1
     - _DstBlend: 10
     - _Metallic: 0
     - _OcclusionStrength: 1
-    - _Smoothness: 0
+    - _Smoothness: 0.5
     - _SrcBlend: 5
     - _ZWrite: 0
     m_Colors:
-    - _Emission: {r: 0, g: 0, b: 0, a: 1}
-    - _Tint: {r: 1, g: 0.11792451, b: 0.11792451, a: 1}
+    - _Emission: {r: 1, g: 1, b: 1, a: 1}
+    - _Tint: {r: 1, g: 1, b: 1, a: 1}
