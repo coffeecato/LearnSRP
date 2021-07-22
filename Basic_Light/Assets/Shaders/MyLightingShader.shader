@@ -45,11 +45,13 @@
 
             #pragma multi_compile _ SHADOWS_SCREEN
             #pragma multi_compile _ VERTEXLIGHT_ON
+            #pragma multi_compile_fog
 
             #pragma vertex MyVertexProgram
             #pragma fragment MyFragmentProgram
 
             #define BINORMAL_PER_FRAGMENT
+            #define FOG_DISTANCE
             #define FORWARD_BASE_PASS
 
             #include "MyLighting.cginc"
@@ -73,6 +75,7 @@
 			#pragma shader_feature _DETAIL_MASK
 			#pragma shader_feature _DETAIL_ALBEDO_MAP
 			#pragma shader_feature _DETAIL_NORMAL_MAP
+            #pragma multi_compile_fog
 
             #pragma vertex MyVertexProgram
             #pragma fragment MyFragmentProgram
