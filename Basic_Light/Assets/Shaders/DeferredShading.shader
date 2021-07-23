@@ -8,6 +8,7 @@
     {
         Pass
         {
+            Blend One One
             Cull Off
             ZTest Always
             ZWrite Off
@@ -19,31 +20,10 @@
             #pragma fragment FragmentProgram
 
             #pragma exclude_renderers nomrt
+            #pragma multi_compile_lightpass
+            #pragma multi_compile _ UNITY_HDR_ON
 
-            #include "UnityCG.cginc"
-
-            struct VertexData
-            {
-                float4 vertex : POSITION;
-            };
-
-            struct Interpolators
-            {
-                float4 pos : SV_POSITION;
-            };
-
-            Interpolators VertexProgram(VertexData v)
-            {
-                Interpolators i;
-                i.pos = UnityObjectToClipPos(v.vertex);
-                return i;
-            }
-
-            float4 FragmentProgram(Interpolators i) : SV_Target
-            {
-                return 0;
-            }
-
+            #include "MyDeferredShading.cginc"
             ENDCG
         }
 
@@ -96,6 +76,8 @@
             float4 FragmentProgram(Interpolators i) : SV_Target
             {
                 return -log2(tex2D(_LightBuffer, i.uv));
+                // return tex2D(_LightBuffer, i.uv);
+                // return 0;
             }
 
             ENDCG
