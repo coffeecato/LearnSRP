@@ -1,86 +1,76 @@
-﻿Shader "coffeecat/BasicRender/DeferredShading"
-{
-    Properties
-    {
+﻿Shader "coffeecat/BasicRender/DeferredShading" {
+	
+	Properties {
+	}
 
-    }
-    SubShader
-    {
-        Pass
-        {
-            Blend One One
-            Cull Off
-            ZTest Always
-            ZWrite Off
+	SubShader {
 
-            CGPROGRAM
+		Pass {
+			Blend [_SrcBlend] [_DstBlend]
+			ZWrite Off
 
-            #pragma target 3.0
-            #pragma vertex VertexProgram
-            #pragma fragment FragmentProgram
+			CGPROGRAM
 
-            #pragma exclude_renderers nomrt
-            #pragma multi_compile_lightpass
-            #pragma multi_compile _ UNITY_HDR_ON
+			#pragma target 3.0
+			#pragma vertex VertexProgram
+			#pragma fragment FragmentProgram
 
-            #include "MyDeferredShading.cginc"
-            ENDCG
-        }
+			#pragma exclude_renderers nomrt
 
-        Pass
-        {
-            Cull Off
-            ZTest Always
-            ZWrite Off
+			#pragma multi_compile_lightpass
+			#pragma multi_compile _ UNITY_HDR_ON
 
-            Stencil
-            {
-                Ref [_StencilNonBackground]
-                ReadMask [_StencilNonBackground]
-                CompBack Equal
-                CompFront Equal
-            }
+			#include "MyDeferredShading.cginc"
 
-            CGPROGRAM
+			ENDCG
+		}
 
-            #pragma target 3.0
-            #pragma vertex VertexProgram
-            #pragma fragment FragmentProgram
+		Pass {
+			Cull Off
+			ZTest Always
+			ZWrite Off
 
-            #pragma exclude_renderers nomrt
+			Stencil {
+				Ref [_StencilNonBackground]
+				ReadMask [_StencilNonBackground]
+				CompBack Equal
+				CompFront Equal
+			}
 
-            #include "UnityCG.cginc"
+			CGPROGRAM
 
-            sampler2D _LightBuffer;
+			#pragma target 3.0
+			#pragma vertex VertexProgram
+			#pragma fragment FragmentProgram
 
-            struct VertexData
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
+			#pragma exclude_renderers nomrt
 
-            struct Interpolators
-            {
-                float4 pos : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
+			#include "UnityCG.cginc"
 
-            Interpolators VertexProgram(VertexData v)
-            {
-                Interpolators i;
-                i.pos = UnityObjectToClipPos(v.vertex);
-                i.uv = v.uv;
-                return i;
-            }
+			sampler2D _LightBuffer;
 
-            float4 FragmentProgram(Interpolators i) : SV_Target
-            {
-                return -log2(tex2D(_LightBuffer, i.uv));
-                // return tex2D(_LightBuffer, i.uv);
-                // return 0;
-            }
+			struct VertexData {
+				float4 vertex : POSITION;
+				float2 uv : TEXCOORD0;
+			};
 
-            ENDCG
-        }
-    }
+			struct Interpolators {
+				float4 pos : SV_POSITION;
+				float2 uv : TEXCOORD0;
+			};
+
+			Interpolators VertexProgram (VertexData v) {
+				Interpolators i;
+				i.pos = UnityObjectToClipPos(v.vertex);
+				i.uv = v.uv;
+				return i;
+			}
+
+			float4 FragmentProgram (Interpolators i) : SV_Target {
+				return -log2(tex2D(_LightBuffer, i.uv));
+			}
+
+			ENDCG
+		}
+	}
 }
